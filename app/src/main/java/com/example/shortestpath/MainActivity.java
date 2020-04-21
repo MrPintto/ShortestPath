@@ -1,91 +1,102 @@
 package com.example.shortestpath;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
-import android.location.Location;
+import android.graphics.Color;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.widget.Toast;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
+import com.example.shortestpath.libs.TaskLoadedCallback;
+import com.example.shortestpath.libs.FetchURL;
 
-public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
 
-    GoogleMap map;
-    Location currentLocation;
-    FusedLocationProviderClient fusedLocationProviderClient;
-    private static final int REQUEST_CODE = 101;
+import org.json.JSONObject;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.*;
+
+public class MainActivity extends AppCompatActivity implements OnMapReadyCallback,TaskLoadedCallback {
+
+    private GoogleMap mMap;
+    ArrayList<LatLng> markerPoints = new ArrayList<LatLng>();
+    Button getDirection;
+    private MarkerOptions place1, place2;
+    private Polyline currentPolyline;
 
     //Activity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        /*
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-        */
 
-        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
-        fetchLastLocation();
-    }
+        place1 = new MarkerOptions().position(new LatLng(13.692035,100.6451767)).title("Location 1");
+        place2 = new MarkerOptions().position(new LatLng(13.752356, 100.629911)).title("Location 2");
 
-    private void fetchLastLocation() {
-        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
-            ActivityCompat.requestPermissions(this,new String[]{Manifest.permission.ACCESS_FINE_LOCATION},REQUEST_CODE);
-            return;
-        }
-        Task<Location> task = fusedLocationProviderClient.getLastLocation();
-        task.addOnSuccessListener(new OnSuccessListener<Location>() {
+        getDirection = findViewById(R.id.buttonGetDirection);
+        getDirection.setOnClickListener(new View.OnClickListener(){
             @Override
-            public void onSuccess(Location location) {
-                if(location != null){
-                    currentLocation = location;
-                    Toast.makeText(getApplicationContext(),currentLocation.getLatitude()+""+currentLocation.getLongitude(),Toast.LENGTH_SHORT).show();
-                    SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-                            .findFragmentById(R.id.map);
-                    mapFragment.getMapAsync(MainActivity.this);
-                }
+            public void onClick(View view){
+                new FetchURL(MainActivity.this).execute(getDirectionsUrl(place1.getPosition(), place2.getPosition()), "driving");
             }
         });
+        //Test Coordinates
+        //Place1 13.692035,100.6451767
+        //Place2 13.752356, 100.629911
     }
 
     //OnMap interactive
     @Override
     public void onMapReady(GoogleMap googleMap) {
-        LatLng current = new LatLng(currentLocation.getLatitude(),currentLocation.getLongitude());
-        MarkerOptions markerOptions = new MarkerOptions().position(current).title("You Are Here");
-        googleMap.moveCamera(CameraUpdateFactory.newLatLng(current));
-        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(current,5));
-        googleMap.addMarker(markerOptions);
+        mMap = googleMap;
+        googleMap.getUiSettings().setZoomControlsEnabled(true);
+        googleMap.setMyLocationEnabled(true);
+        Log.d("mylog", "Added Markers");
+        mMap.addMarker(place1);
+        mMap.addMarker(place2);
+    }
+
+    private String getDirectionsUrl(LatLng origin, LatLng destination){
+        //Settings
+        //Value of origin
+        String str_org = "origin=" + origin.latitude + "," + origin.longitude;
+        //Value of destination
+        String str_des = "destination=" + destination.latitude + "," + destination.longitude;
+        //Set Value enable Sensor
+        String sensor = "sensor=false";
+        //Set Value of mode
+        String mode = "mode=driving";
+        //Build full param
+        String param = str_org + "&" + str_des + "&" + sensor + "&" + mode;
+        //Output format
+        String output = "json";
+        //request URL
+        String url = "https://map.googleapis.com/maps/directions/" + output + "?" + param;
+        return url;
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (REQUEST_CODE){
-            case REQUEST_CODE:
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED){
-                    fetchLastLocation();
-                }
-                break;
-        }
+    public void onTaskDone(Object... values) {
+        if (currentPolyline != null) currentPolyline.remove();
+        currentPolyline = mMap.addPolyline((PolylineOptions) values[0]);
     }
 }
+
+
+
